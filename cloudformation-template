@@ -111,14 +111,6 @@ Resources:
           systemctl enable docker | tee -a /var/log/user-data.log
           usermod -aG docker ubuntu | tee -a /var/log/user-data.log
           
-          # Verificar que Docker está funcionando
-          if systemctl is-active --quiet docker; then
-            echo "Docker está funcionando correctamente" >> /var/log/user-data.log
-          else
-            echo "Error: Docker no está funcionando correctamente" >> /var/log/user-data.log
-            exit 1
-          fi
-          
           # Instalar Docker Compose
           curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose | tee -a /var/log/user-data.log
           chmod +x /usr/local/bin/docker-compose | tee -a /var/log/user-data.log
@@ -132,15 +124,8 @@ Resources:
           chmod +x kubectl | tee -a /var/log/user-data.log
           mv kubectl /usr/local/bin/ | tee -a /var/log/user-data.log
           
-          # Asegurarse de que el usuario 'ubuntu' esté en el grupo docker
-          sudo usermod -aG docker ubuntu
-          
-          # Verificar si Minikube puede iniciarse con Docker
+          # Iniciar Minikube
           minikube start --driver=none | tee -a /var/log/user-data.log
-          if [ $? -ne 0 ]; then
-            echo "Error: Minikube no pudo iniciarse correctamente" >> /var/log/user-data.log
-            exit 1
-          fi
           
           # Crear archivo nginx.conf
           cat <<EOF > /home/ubuntu/nginx.conf
