@@ -94,7 +94,7 @@ Resources:
       SecurityGroupIds: [ !Ref MySecurityGroup ]
       SubnetId: !Ref MySubnet
       ImageId: "ami-0866a3c8686eaeeba" # Reemplaza con la AMI de Ubuntu 20.04 LTS para tu región
-      KeyName: !Ref keyName
+      KeyName: !Ref KEY_NAME
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
