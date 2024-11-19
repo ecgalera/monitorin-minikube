@@ -95,6 +95,6 @@ Resources:
       SubnetId: !Ref MySubnet
       ImageId: "ami-0866a3c8686eaeeba"  # Ubuntu 20.04 LTS (Reemplazar según región)
       KeyName: !Ref KeyName
-      UserData:
+
         
           
