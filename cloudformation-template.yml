@@ -87,7 +87,6 @@ Resources:
         - Key: "Name"
           Value: "MySecurityGroup"
 
-Resources:
   MyInstance:
     Type: "AWS::EC2::Instance"
     Properties:
@@ -254,4 +253,3 @@ Resources:
           kubectl apply -f /home/ubuntu/manifests/
 
           echo "Manifiestos aplicados correctamente" >> /var/log/user-data.log
-
