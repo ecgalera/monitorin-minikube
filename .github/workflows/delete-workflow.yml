@@ -1,0 +1,21 @@
+name: Eliminar Stack de CloudFormation
+
+on:
+  workflow_dispatch:  # Esto permitirá que el workflow se ejecute manualmente desde GitHub Actions
+
+jobs:
+  delete-stack:
+    runs-on: ubuntu-latest  # El runner será Ubuntu
+
+    steps:
+      - name: Configurar AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}  # Guarda tus credenciales en los secretos de GitHub
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1  # Cambia a la región que necesites
+
+      - name: Eliminar el Stack de CloudFormation
+        run: |
+          aws cloudformation delete-stack --stack-name nginx-monitoring-stack
+          echo "El stack de CloudFormation fue eliminado"
