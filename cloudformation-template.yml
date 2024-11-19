@@ -122,8 +122,13 @@ Resources:
           # Crear namespace para monitoring
           kubectl create namespace monitoring
 
-          # Crear manifiestos de Kubernetes
+          # Crear directorio para los manifiestos
           mkdir -p /home/ubuntu/manifests
+
+          # Asegurar que el usuario 'ubuntu' tenga permisos de escritura en el directorio
+          sudo chown ubuntu:ubuntu /home/ubuntu/manifests
+
+          # Crear manifiestos de Kubernetes
           cat <<EOF > /home/ubuntu/manifests/nginx.yml
           apiVersion: apps/v1
           kind: Deployment
