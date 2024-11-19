@@ -5,83 +5,7 @@ Parameters:
     Description: "The name of the SSH key pair to use"
 
 Resources:
-  MyVPC:
-    Type: "AWS::EC2::VPC"
-    Properties:
-      CidrBlock: "10.0.0.0/16"
-      Tags:
-        - Key: "Name"
-          Value: "MyVPC"
-
-  MySubnet:
-    Type: "AWS::EC2::Subnet"
-    Properties:
-      VpcId: !Ref MyVPC
-      CidrBlock: "10.0.1.0/24"
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: "Name"
-          Value: "MySubnet"
-
-  MyInternetGateway:
-    Type: "AWS::EC2::InternetGateway"
-    Properties:
-      Tags:
-        - Key: "Name"
-          Value: "MyInternetGateway"
-
-  AttachGateway:
-    Type: "AWS::EC2::VPCGatewayAttachment"
-    Properties:
-      VpcId: !Ref MyVPC
-      InternetGatewayId: !Ref MyInternetGateway
-
-  MyRouteTable:
-    Type: "AWS::EC2::RouteTable"
-    Properties:
-      VpcId: !Ref MyVPC
-      Tags:
-        - Key: "Name"
-          Value: "MyRouteTable"
-
-  MyRoute:
-    Type: "AWS::EC2::Route"
-    Properties:
-      RouteTableId: !Ref MyRouteTable
-      DestinationCidrBlock: "0.0.0.0/0"
-      GatewayId: !Ref MyInternetGateway
-
-  MyRouteTableAssociation:
-    Type: "AWS::EC2::SubnetRouteTableAssociation"
-    Properties:
-      SubnetId: !Ref MySubnet
-      RouteTableId: !Ref MyRouteTable
-
-  MySecurityGroup:
-    Type: "AWS::EC2::SecurityGroup"
-    Properties:
-      GroupDescription: "Allow HTTP, Grafana, Prometheus, and SSH traffic"
-      VpcId: !Ref MyVPC
-      SecurityGroupIngress:
-        - IpProtocol: "tcp"
-          FromPort: "80"
-          ToPort: "80"
-          CidrIp: "0.0.0.0/0"
-        - IpProtocol: "tcp"
-          FromPort: "3000"
-          ToPort: "3000"
-          CidrIp: "0.0.0.0/0"
-        - IpProtocol: "tcp"
-          FromPort: "9090"
-          ToPort: "9090"
-          CidrIp: "0.0.0.0/0"
-        - IpProtocol: "tcp"
-          FromPort: "22"
-          ToPort: "22"
-          CidrIp: "0.0.0.0/0"
-      Tags:
-        - Key: "Name"
-          Value: "MySecurityGroup"
+  # (Resto de recursos, como VPC, Subnet, etc. aquí)
 
   MyInstance:
     Type: "AWS::EC2::Instance"
@@ -119,16 +43,26 @@ Resources:
           # Iniciar Minikube
           minikube start --driver=docker
 
+          # Esperar a que Minikube esté completamente listo
+          echo "Esperando a que Minikube inicie..."
+          until minikube status | grep -q "Host: Running"; do
+            echo "Minikube aún no está listo, esperando..."
+            sleep 10
+          done
+
+          # Verificar estado de Minikube
+          echo "Minikube está listo!"
+
           # Crear namespace para monitoring
           kubectl create namespace monitoring
 
-          # Crear directorio para los manifiestos
+          # Crear directorio para los manifiestos (si no existe)
           mkdir -p /home/ubuntu/manifests
 
-          # Asegurar que el usuario 'ubuntu' tenga permisos de escritura en el directorio
+          # Asegurarse de que el usuario 'ubuntu' tenga permisos en el directorio
           sudo chown ubuntu:ubuntu /home/ubuntu/manifests
 
-          # Crear manifiestos de Kubernetes
+          # Crear archivos YAML con los manifiestos de Kubernetes
           cat <<EOF > /home/ubuntu/manifests/nginx.yml
           apiVersion: apps/v1
           kind: Deployment
@@ -237,7 +171,7 @@ Resources:
             type: NodePort
           EOF
 
-          # Aplicar manifiestos
+          # Aplicar manifiestos de Kubernetes
           kubectl apply -f /home/ubuntu/manifests/
 
           echo "Cluster y servicios configurados correctamente" >> /var/log/user-data.log
