@@ -96,38 +96,5 @@ Resources:
       ImageId: "ami-0866a3c8686eaeeba"  # Ubuntu 20.04 LTS (Reemplazar según región)
       KeyName: !Ref KeyName
       UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          set -e
-          echo "Configuración inicial de Minikube y Kubernetes" > /var/log/user-data.log
-
-          # Actualizar el sistema
-          apt-get update -y
-          apt-get upgrade -y
-
-          # Instalar Docker
-          apt-get install -y docker.io
-          systemctl start docker
-          systemctl enable docker
-          usermod -aG docker ubuntu
-
-          # Instalar kubectl
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          mv kubectl /usr/local/bin/
-
-          # Instalar Minikube
-          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-          install minikube-linux-amd64 /usr/local/bin/minikube
-
-          # Iniciar Minikube
-          minikube start --driver=docker
-
-          # Esperar a que Minikube esté corriendo
-          echo "Esperando a que Minikube esté listo..."
-          until minikube status | grep -q "host: Running"; do
-            sleep 30
-            echo "Minikube no está listo, esperando..."
-          done
-
-          echo "Minikube está corriendo." >> /var/log/user-data.log
+        
+          
