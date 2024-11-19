@@ -60,7 +60,7 @@ Resources:
   MySecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
-      GroupDescription: "Allow HTTP, Prometheus, Grafana, and SSH traffic"
+      GroupDescription: "Allow HTTP, Grafana, Prometheus, and SSH traffic"
       VpcId: !Ref MyVPC
       SecurityGroupIngress:
         - IpProtocol: "tcp"
@@ -76,10 +76,6 @@ Resources:
           ToPort: "9090"
           CidrIp: "0.0.0.0/0"
         - IpProtocol: "tcp"
-          FromPort: "9113"
-          ToPort: "9113"
-          CidrIp: "0.0.0.0/0"
-        - IpProtocol: "tcp"
           FromPort: "22"
           ToPort: "22"
           CidrIp: "0.0.0.0/0"
@@ -93,139 +89,150 @@ Resources:
       InstanceType: "t2.medium"
       SecurityGroupIds: [ !Ref MySecurityGroup ]
       SubnetId: !Ref MySubnet
-      ImageId: "ami-0866a3c8686eaeeba" # Reemplaza con la AMI de Ubuntu 20.04 LTS para tu región
+      ImageId: "ami-0866a3c8686eaeeba" # Ubuntu 20.04 LTS (Reemplaza según región)
       KeyName: !Ref KeyName
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
           set -e
-          echo "Iniciando script de configuración" > /var/log/user-data.log
-          
-          # Actualizar el sistema
-          apt-get update -y | tee -a /var/log/user-data.log
-          apt-get upgrade -y | tee -a /var/log/user-data.log
-          
+          echo "Configuración inicial de Minikube y Kubernetes" > /var/log/user-data.log
+
+          # Actualizar sistema
+          apt-get update -y
+          apt-get upgrade -y
+
           # Instalar Docker
-          apt-get install -y docker.io | tee -a /var/log/user-data.log
-          systemctl start docker | tee -a /var/log/user-data.log
-          systemctl enable docker | tee -a /var/log/user-data.log
-          usermod -aG docker ubuntu | tee -a /var/log/user-data.log
-          
-          # Verificar que Docker está funcionando
-          if systemctl is-active --quiet docker; then
-            echo "Docker está funcionando correctamente" >> /var/log/user-data.log
-          else
-            echo "Error: Docker no está funcionando correctamente" >> /var/log/user-data.log
-            exit 1
-          fi
-          
-          # Instalar Docker Compose
-          curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose | tee -a /var/log/user-data.log
-          chmod +x /usr/local/bin/docker-compose | tee -a /var/log/user-data.log
-          
-          # Instalar Minikube
-          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 | tee -a /var/log/user-data.log
-          install minikube-linux-amd64 /usr/local/bin/minikube | tee -a /var/log/user-data.log
-          
+          apt-get install -y docker.io
+          systemctl start docker
+          systemctl enable docker
+          usermod -aG docker ubuntu
+
           # Instalar kubectl
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" | tee -a /var/log/user-data.log
-          chmod +x kubectl | tee -a /var/log/user-data.log
-          mv kubectl /usr/local/bin/ | tee -a /var/log/user-data.log
-          
-          # Asegurarse de que el usuario 'ubuntu' esté en el grupo docker
-          sudo usermod -aG docker ubuntu
-          
-          # Verificar si Minikube puede iniciarse con Docker
-          minikube start --driver=none | tee -a /var/log/user-data.log
-          if [ $? -ne 0 ]; then
-            echo "Error: Minikube no pudo iniciarse correctamente" >> /var/log/user-data.log
-            exit 1
-          fi
-          
-          # Crear archivo nginx.conf
-          cat <<EOF > /home/ubuntu/nginx.conf
-          worker_processes 1;
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
 
-          events {
-              worker_connections 1024;
-          }
+          # Instalar Minikube
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          install minikube-linux-amd64 /usr/local/bin/minikube
 
-          http {
-              include /etc/nginx/mime.types;
-              default_type application/octet-stream;
+          # Iniciar Minikube
+          minikube start --driver=docker
 
-              sendfile on;
-              keepalive_timeout 65;
+          # Crear namespace para monitoring
+          kubectl create namespace monitoring
 
-              server {
-                  listen 80;
-                  server_name localhost;
-
-                  # Página de bienvenida de Nginx
-                  location / {
-                      root /usr/share/nginx/html;
-                      index index.html;
-                  }
-
-                  # Endpoint de métricas de Nginx
-                  location /status {
-                      stub_status on;
-                      access_log off;
-                      allow all;  # Cambia esto si quieres restringir el acceso
-                  }
-              }
-          }
-          EOF
-          
-          # Crear archivo prometheus.yml
-          cat <<EOF > /home/ubuntu/prometheus.yml
-          global:
-            scrape_interval: 15s
-          scrape_configs:
-            - job_name: 'nginx'
-              static_configs:
-                - targets: ['nginx-exporter:9113']
+          # Crear manifiestos de Kubernetes
+          mkdir -p /home/ubuntu/manifests
+          cat <<EOF > /home/ubuntu/manifests/nginx.yml
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: nginx
+            namespace: monitoring
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: nginx
+            template:
+              metadata:
+                labels:
+                  app: nginx
+              spec:
+                containers:
+                - image: nginx:latest
+                  name: nginx
+                  ports:
+                  - containerPort: 80
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: nginx
+            namespace: monitoring
+          spec:
+            ports:
+            - port: 80
+              targetPort: 80
+            selector:
+              app: nginx
+            type: NodePort
           EOF
 
-          # Crear archivo docker-compose.yml
-          cat <<EOF > /home/ubuntu/docker-compose.yml
-          version: '3'
-          services:
-            nginx:
-              image: nginx:latest
-              ports:
-                - "80:80"
-              networks:
-                - mynetwork
-              volumes:
-                - ./nginx.conf:/etc/nginx/nginx.conf
-            grafana:
-              image: grafana/grafana:latest
-              ports:
-                - "3000:3000"
-              networks:
-                - mynetwork
-            prometheus:
-              image: prom/prometheus:latest
-              ports:
-                - "9090:9090"
-              networks:
-                - mynetwork
-              volumes:
-                - ./prometheus.yml:/etc/prometheus/prometheus.yml
-            nginx-exporter:
-              image: nginx/nginx-prometheus-exporter:latest
-              ports:
-                - "9113:9113"
-              networks:
-                - mynetwork
-              command: ["-nginx.scrape-uri=http://nginx/status"]
-          networks:
-            mynetwork:
-              driver: bridge
+          cat <<EOF > /home/ubuntu/manifests/grafana.yml
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: grafana
+            namespace: monitoring
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: grafana
+            template:
+              metadata:
+                labels:
+                  app: grafana
+              spec:
+                containers:
+                - image: grafana/grafana:latest
+                  name: grafana
+                  ports:
+                  - containerPort: 3000
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: grafana
+            namespace: monitoring
+          spec:
+            ports:
+            - port: 3000
+              targetPort: 3000
+            selector:
+              app: grafana
+            type: NodePort
           EOF
 
-          # Aplicar configuración de Docker Compose en Minikube
-          minikube kubectl -- apply -f /home/ubuntu/docker-compose.yml | tee -a /var/log/user-data.log
-          
-          echo "Script de configuración completado" >> /var/log/user-data.log
+          cat <<EOF > /home/ubuntu/manifests/prometheus.yml
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: prometheus
+            namespace: monitoring
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: prometheus
+            template:
+              metadata:
+                labels:
+                  app: prometheus
+              spec:
+                containers:
+                - image: prom/prometheus:latest
+                  name: prometheus
+                  ports:
+                  - containerPort: 9090
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: prometheus
+            namespace: monitoring
+          spec:
+            ports:
+            - port: 9090
+              targetPort: 9090
+            selector:
+              app: prometheus
+            type: NodePort
+          EOF
+
+          # Aplicar manifiestos
+          kubectl apply -f /home/ubuntu/manifests/
+
+          echo "Cluster y servicios configurados correctamente" >> /var/log/user-data.log

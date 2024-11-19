@@ -1,0 +1,231 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  KeyName:
+    Type: String
+    Description: "The name of the SSH key pair to use"
+
+Resources:
+  MyVPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+      Tags:
+        - Key: "Name"
+          Value: "MyVPC"
+
+  MySubnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: "10.0.1.0/24"
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: "Name"
+          Value: "MySubnet"
+
+  MyInternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: "MyInternetGateway"
+
+  AttachGateway:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyInternetGateway
+
+  MyRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: "Name"
+          Value: "MyRouteTable"
+
+  MyRoute:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: !Ref MyRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref MyInternetGateway
+
+  MyRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref MySubnet
+      RouteTableId: !Ref MyRouteTable
+
+  MySecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Allow HTTP, Prometheus, Grafana, and SSH traffic"
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: "80"
+          ToPort: "80"
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: "3000"
+          ToPort: "3000"
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: "9090"
+          ToPort: "9090"
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: "9113"
+          ToPort: "9113"
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: "Name"
+          Value: "MySecurityGroup"
+
+  MyInstance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: "t2.medium"
+      SecurityGroupIds: [ !Ref MySecurityGroup ]
+      SubnetId: !Ref MySubnet
+      ImageId: "ami-0866a3c8686eaeeba" # Reemplaza con la AMI de Ubuntu 20.04 LTS para tu región
+      KeyName: !Ref KeyName
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          echo "Iniciando script de configuración" > /var/log/user-data.log
+          
+          # Actualizar el sistema
+          apt-get update -y | tee -a /var/log/user-data.log
+          apt-get upgrade -y | tee -a /var/log/user-data.log
+          
+          # Instalar Docker
+          apt-get install -y docker.io | tee -a /var/log/user-data.log
+          systemctl start docker | tee -a /var/log/user-data.log
+          systemctl enable docker | tee -a /var/log/user-data.log
+          usermod -aG docker ubuntu | tee -a /var/log/user-data.log
+          
+          # Verificar que Docker está funcionando
+          if systemctl is-active --quiet docker; then
+            echo "Docker está funcionando correctamente" >> /var/log/user-data.log
+          else
+            echo "Error: Docker no está funcionando correctamente" >> /var/log/user-data.log
+            exit 1
+          fi
+          
+          # Instalar Docker Compose
+          curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose | tee -a /var/log/user-data.log
+          chmod +x /usr/local/bin/docker-compose | tee -a /var/log/user-data.log
+          
+          # Instalar Minikube
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 | tee -a /var/log/user-data.log
+          install minikube-linux-amd64 /usr/local/bin/minikube | tee -a /var/log/user-data.log
+          
+          # Instalar kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" | tee -a /var/log/user-data.log
+          chmod +x kubectl | tee -a /var/log/user-data.log
+          mv kubectl /usr/local/bin/ | tee -a /var/log/user-data.log
+          
+          # Asegurarse de que el usuario 'ubuntu' esté en el grupo docker
+          sudo usermod -aG docker ubuntu
+          
+          # Verificar si Minikube puede iniciarse con Docker
+          minikube start --driver=none | tee -a /var/log/user-data.log
+          if [ $? -ne 0 ]; then
+            echo "Error: Minikube no pudo iniciarse correctamente" >> /var/log/user-data.log
+            exit 1
+          fi
+          
+          # Crear archivo nginx.conf
+          cat <<EOF > /home/ubuntu/nginx.conf
+          worker_processes 1;
+
+          events {
+              worker_connections 1024;
+          }
+
+          http {
+              include /etc/nginx/mime.types;
+              default_type application/octet-stream;
+
+              sendfile on;
+              keepalive_timeout 65;
+
+              server {
+                  listen 80;
+                  server_name localhost;
+
+                  # Página de bienvenida de Nginx
+                  location / {
+                      root /usr/share/nginx/html;
+                      index index.html;
+                  }
+
+                  # Endpoint de métricas de Nginx
+                  location /status {
+                      stub_status on;
+                      access_log off;
+                      allow all;  # Cambia esto si quieres restringir el acceso
+                  }
+              }
+          }
+          EOF
+          
+          # Crear archivo prometheus.yml
+          cat <<EOF > /home/ubuntu/prometheus.yml
+          global:
+            scrape_interval: 15s
+          scrape_configs:
+            - job_name: 'nginx'
+              static_configs:
+                - targets: ['nginx-exporter:9113']
+          EOF
+
+          # Crear archivo docker-compose.yml
+          cat <<EOF > /home/ubuntu/docker-compose.yml
+          version: '3'
+          services:
+            nginx:
+              image: nginx:latest
+              ports:
+                - "80:80"
+              networks:
+                - mynetwork
+              volumes:
+                - ./nginx.conf:/etc/nginx/nginx.conf
+            grafana:
+              image: grafana/grafana:latest
+              ports:
+                - "3000:3000"
+              networks:
+                - mynetwork
+            prometheus:
+              image: prom/prometheus:latest
+              ports:
+                - "9090:9090"
+              networks:
+                - mynetwork
+              volumes:
+                - ./prometheus.yml:/etc/prometheus/prometheus.yml
+            nginx-exporter:
+              image: nginx/nginx-prometheus-exporter:latest
+              ports:
+                - "9113:9113"
+              networks:
+                - mynetwork
+              command: ["-nginx.scrape-uri=http://nginx/status"]
+          networks:
+            mynetwork:
+              driver: bridge
+          EOF
+
+          # Aplicar configuración de Docker Compose en Minikube
+          minikube kubectl -- apply -f /home/ubuntu/docker-compose.yml | tee -a /var/log/user-data.log
+          
+          echo "Script de configuración completado" >> /var/log/user-data.log
