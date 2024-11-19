@@ -87,14 +87,13 @@ Resources:
         - Key: "Name"
           Value: "MySecurityGroup"
 
-
   MyInstance:
     Type: "AWS::EC2::Instance"
     Properties:
       InstanceType: "t2.medium"
       SecurityGroupIds: [ !Ref MySecurityGroup ]
       SubnetId: !Ref MySubnet
-      ImageId: "ami-0866a3c8686eaeeba" # Ubuntu 20.04 LTS (Reemplaza según región)
+      ImageId: "ami-0866a3c8686eaeeba"  # Ubuntu 20.04 LTS (Reemplazar según región)
       KeyName: !Ref KeyName
       UserData:
         Fn::Base64: !Sub |
@@ -102,7 +101,7 @@ Resources:
           set -e
           echo "Configuración inicial de Minikube y Kubernetes" > /var/log/user-data.log
 
-          # Actualizar sistema
+          # Actualizar el sistema
           apt-get update -y
           apt-get upgrade -y
 
@@ -124,26 +123,22 @@ Resources:
           # Iniciar Minikube
           minikube start --driver=docker
 
-          # Esperar a que Minikube esté completamente listo
-          echo "Esperando a que Minikube inicie..."
-          until minikube status | grep -q "Host: Running"; do
-            echo "Minikube aún no está listo, esperando..."
+          # Esperar a que Minikube esté corriendo
+          echo "Esperando a que Minikube esté listo..."
+          until minikube status | grep -q "host: Running"; do
             sleep 10
+            echo "Minikube no está listo, esperando..."
           done
 
-          # Verificar estado de Minikube
-          echo "Minikube está listo!"
+          echo "Minikube está corriendo. Procediendo con la creación de manifiestos."
 
-          # Crear namespace para monitoring
+          # Crear el namespace de monitoring
           kubectl create namespace monitoring
 
-          # Crear directorio para los manifiestos (si no existe)
+          # Crear los manifiestos de Kubernetes
           mkdir -p /home/ubuntu/manifests
-
-          # Asegurarse de que el usuario 'ubuntu' tenga permisos en el directorio
-          sudo chown ubuntu:ubuntu /home/ubuntu/manifests
-
-          # Crear archivos YAML con los manifiestos de Kubernetes
+          
+          # Manifiesto de Nginx
           cat <<EOF > /home/ubuntu/manifests/nginx.yml
           apiVersion: apps/v1
           kind: Deployment
@@ -180,6 +175,7 @@ Resources:
             type: NodePort
           EOF
 
+          # Manifiesto de Grafana
           cat <<EOF > /home/ubuntu/manifests/grafana.yml
           apiVersion: apps/v1
           kind: Deployment
@@ -216,6 +212,7 @@ Resources:
             type: NodePort
           EOF
 
+          # Manifiesto de Prometheus
           cat <<EOF > /home/ubuntu/manifests/prometheus.yml
           apiVersion: apps/v1
           kind: Deployment
@@ -252,7 +249,7 @@ Resources:
             type: NodePort
           EOF
 
-          # Aplicar manifiestos de Kubernetes
+          # Aplicar los manifiestos
           kubectl apply -f /home/ubuntu/manifests/
 
-          echo "Cluster y servicios configurados correctamente" >> /var/log/user-data.log
+          echo "Manifiestos aplicados correctamente" >> /var/log/user-data.log
